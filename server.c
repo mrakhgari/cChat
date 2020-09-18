@@ -17,12 +17,12 @@
 typedef struct sockaddr_in SA_IN;
 typedef struct sockaddr SA;
 
-void handler_connection(int client_socket);
+void handle_connection(int client_socket);
 int check(int exp, const char *msg);
 
 int main(int argc, char **argv) 
 { 
-	int server_scoket, client_socket, addr_size;
+	int server_socket, client_socket, addr_size;
      	SA_IN server_addr, client_addr;
 
 		
@@ -32,13 +32,13 @@ int main(int argc, char **argv)
 	
 	// initialze the address struct
 	// assign IP, PORT 
-	servaddr.sin_family = AF_INET; 
-	servaddr.sin_addr.s_addr = INADDR_ANY; 
-	servaddr.sin_port = htons(PORT); 
+	server_addr.sin_family = AF_INET; 
+	server_addr.sin_addr.s_addr = INADDR_ANY; 
+	server_addr.sin_port = htons(PORT); 
 
 
 	// Binding newly created socket to given IP and verification 
-	check((bind(server_socket, (SA*)&server_addr, sizeof(server_addr)), 
+	check(bind(server_socket, (SA*)&server_addr, sizeof(server_addr)), 
 		"socket bind failed...\n"); 
 
 	// Now server is ready to listen and verification 
@@ -49,7 +49,7 @@ int main(int argc, char **argv)
 		printf("Waiting for connection...\n");
 		addr_size = sizeof(SA_IN);
 		check(client_socket = 
-			accept(server_socket, (SA*)&clieny_addr, (socketlen_t*)&addr_size), "accept failed");
+			accept(server_socket, (SA*)&client_addr, (socklen_t*)&addr_size), "accept failed");
 		printf("connected!!!\n");
 		// do whatever we do with connections.
 		handle_connection(client_socket);
@@ -68,6 +68,21 @@ int check (int exp, const char *msg)
 }
 
 
-void handle_connection(int client_scoket)
+void handle_connection(int client_socket)
 {
+	char buffer[BUFFER_SIZE];
+	size_t bytes_read;
+	int msg_size = 0;
+	
+	// read the client message
+	while((bytes_read = read(client_socket, buffer+msg_size, sizeof(buffer)-msg_size-1))>0){
+		msg_size += bytes_read;
+		if (msg_size> BUFFER_SIZE-1 || buffer[msg_size-1] == '\n') break;
+	}
+	check(bytes_read, "recv error");
+
+	printf("REQUEST: %s", buffer);
+	fflush(stdout);
+	close(client_socket);
+	printf("cloasing connection\n");
 }
