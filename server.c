@@ -7,6 +7,7 @@
 #include <sys/types.h> 
 #include <netinet/in.h> 
 #include <stdbool.h>
+#include <pthread.h>
 
 #define BUFFER_SIZE 4096 
 #define PORT 8000 
@@ -17,7 +18,7 @@
 typedef struct sockaddr_in SA_IN;
 typedef struct sockaddr SA;
 
-void handle_connection(int client_socket);
+void * handle_connection(void* p_client_socket);
 int check(int exp, const char *msg);
 
 int main(int argc, char **argv) 
@@ -52,7 +53,11 @@ int main(int argc, char **argv)
 			accept(server_socket, (SA*)&client_addr, (socklen_t*)&addr_size), "accept failed");
 		printf("connected!!!\n");
 		// do whatever we do with connections.
-		handle_connection(client_socket);
+		pthread_t t;
+		int *pclient = malloc(sizeof(int));
+		*pclient = client_socket;
+		pthread_create(&t, NULL, handle_connection, pclient);
+//		handle_connection(client_socket);
 	}
 
 	return 0;
@@ -68,8 +73,10 @@ int check (int exp, const char *msg)
 }
 
 
-void handle_connection(int client_socket)
+void * handle_connection(void* p_client_socket)
 {
+	int client_socket = *((int*)p_client_socket);
+	free(p_client_socket);
 	char buffer[BUFFER_SIZE];
 	size_t bytes_read;
 	int msg_size = 0;
@@ -80,9 +87,10 @@ void handle_connection(int client_socket)
 		if (msg_size> BUFFER_SIZE-1 || buffer[msg_size-1] == '\n') break;
 	}
 	check(bytes_read, "recv error");
-
+	buffer[msg_size -1]=0;
 	printf("REQUEST: %s", buffer);
 	fflush(stdout);
 	close(client_socket);
 	printf("cloasing connection\n");
+	return NULL;
 }
