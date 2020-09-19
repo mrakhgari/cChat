@@ -96,6 +96,18 @@ void queue_remove(int uid)
     pthread_mutex_unlock(&clients_mutex);
 }
 
+void join(client_t *client, char *gp)
+{
+    for (int i = 0; i < MAX_GROUP; i++) {
+        if (!client->groups[i]){
+            client->groups[i] = gp;
+            break;
+        }   
+    }
+}
+
+
+
 /* Send message to all clients except sender */
 void send_message(char *s, int uid)
 {
@@ -132,7 +144,7 @@ int handle_message(client_t *cl, char *s)
     {
         char *gp = strtok(NULL, " ");
         printf("user want to join to %s group", gp);
-        // join
+        join(cl, gp);
     }
     else if (strcmp(command, "leave") == 0)
     {
@@ -140,7 +152,7 @@ int handle_message(client_t *cl, char *s)
         printf("user want to join to %s group", gp);
 
     }
-    else if (strcmp(command, "quit\r\n") == 0)
+    else if (strcmp(command, "quit") == 0)
     {
         printf("user %s quit", cl->name);
         return 1;
