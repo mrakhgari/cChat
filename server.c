@@ -13,13 +13,88 @@
 #define PORT 8000 
 #define SOCKET_ERROR (-1)
 #define SERVER_BACKLOG 100
+#define NAME_LEN 32
 
 
 typedef struct sockaddr_in SA_IN;
 typedef struct sockaddr SA;
 
+static int uid = 10;
+
+
+typedef struct 
+{
+	SA_IN address;
+	int sockfd;
+	int uid;
+	char name[NAME_LEN];
+} client_t ;
+
+client_t *client_t[SERVER_BACKLOG]
+
+pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void str_overwrite_stdout(){
+	printf("\r%s", "> ");
+	fflush(stdout);
+}
+
+void str_trim_if(char* arr, int length)
+{
+	for (int i =0; i< length; i++) {
+		if (arr[i] == "\n"){
+			arr[i] = "\0";
+			break;
+		}
+	}
+}
+
+void queue_add(client_t *cl)
+{
+	pthread_mutext_lock(&clients_mutex);
+
+	for (int i=0; i<SERVER_BACKLOG ; i++)
+	{
+		if (!clinets[i])
+		{
+			clients[i] = cl;
+			break;
+		}
+	}
+	pthread_mutext_unlock(&clients_mutex);
+}
+
+
+void send_message(char *s, int uid)
+{
+	pthread_mutext_lock(&clients_mutex);
+	for (int i=0; i<SERVER_BACKLOG; i++){
+		if (clients[i]){
+			if(clients[i] -> uid != uid){
+				if (write(clients[i] -> sockfd, s, strlen(s))< 0){
+					printf("ERROR");
+					break;
+				}
+			}
+		}
+	}
+	pthread_mutext_unlock(&clients_mutex);
+}
+
+
 void * handle_connection(void* p_client_socket);
 int check(int exp, const char *msg);
+
+void print_ip_addr(SA_IN addr)
+{
+	printf("%d.%d.%d.%d", 
+		addr.sin_addr.s_addr & 0xff,
+		(addr.sin_addr.s_addr & 0xff00) >>8,
+		(addr.sin_addr.s_addr & 0xff0000) >>16,
+		(addr.sin_addr.s_addr & 0xff000000) >>24)
+		);
+}
+
 
 int main(int argc, char **argv) 
 { 
@@ -31,7 +106,7 @@ int main(int argc, char **argv)
 	check((server_socket = socket(AF_INET, SOCK_STREAM, 0)), 
 		"socket creation failed...\n"); 
 	
-	// initialze the address struct
+	// initialize the address struct
 	// assign IP, PORT 
 	server_addr.sin_family = AF_INET; 
 	server_addr.sin_addr.s_addr = INADDR_ANY; 
