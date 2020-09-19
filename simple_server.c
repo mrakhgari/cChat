@@ -13,6 +13,7 @@
 #define MAX_CLIENTS 100
 #define BUFFER_SZ 2048
 #define MAX_GROUP 10
+#define GROUP_NAME 10
 
 static _Atomic unsigned int cli_count = 0;
 static int uid = 10;
@@ -24,7 +25,7 @@ typedef struct
     int sockfd;
     int uid;
     char name[32];
-    char *groups[MAX_GROUP];
+    char groups[MAX_GROUP][GROUP_NAME];
 } client_t;
 
 client_t *clients[MAX_CLIENTS];
@@ -96,20 +97,46 @@ void queue_remove(int uid)
     pthread_mutex_unlock(&clients_mutex);
 }
 
-void join(client_t *client, char *gp)
+void print_groups(client_t *client)
 {
+    printf("\n");
     for (int i = 0; i < MAX_GROUP; i++) {
-        if (!client->groups[i]){
-            client->groups[i] = gp;
-            break;
+        if (strcmp(client->groups[i], "") !=0){
+            printf("%s\n",client->groups[i]);
         }   
     }
 }
 
+void join(client_t *client, char *gp)
+{
+    for (int i = 0; i < MAX_GROUP; i++) {
+        if (strlen(client->groups[i]) == 0){
+            strcpy(client->groups[i], gp);
+            return;
+        }   
+    }
+    
+}
 
+void leave(client_t *client, char *gp)
+{  
+    for (int i = 0; i < MAX_CLIENTS; ++i)
+    {
+        if (clients[i])
+        {
+            for (int g = 0; g<MAX_GROUP; g++)
+            {
+                if (strlen(client->groups[g]) != 0 && strcmp(client->groups[g], gp)==0 ){
+                    strcpy(client->groups[g], "");
+                    return;
+                }
+            }
+        }    
+    }
+}
 
 /* Send message to all clients except sender */
-void send_message(char *s, int uid)
+void send_message(char *s, char* gp)
 {
     pthread_mutex_lock(&clients_mutex);
 
@@ -117,17 +144,22 @@ void send_message(char *s, int uid)
     {
         if (clients[i])
         {
-            if (clients[i]->uid != uid)
+            printf("clients %d", i);
+            for (int g_index; g_index<MAX_GROUP; g_index++)
             {
-                if (write(clients[i]->sockfd, s, strlen(s)) < 0)
-                {
-                    perror("ERROR: write to descriptor failed");
-                    break;
-                }
+                char* group_temp = clients[i]->groups[g_index];
+                // printf("group is $s\n" , *group_temp);
+                // printf("strcmp %d", strcmp(group_temp , gp));
+                if (strcmp(group_temp , gp) == 0)
+                    if (write(clients[i]->sockfd, s, strlen(s)) < 0)
+                    {
+                        perror("ERROR: write to descriptor failed");
+                        break;
+                    }
             }
         }
-    }
 
+    }
     pthread_mutex_unlock(&clients_mutex);
 }
 
@@ -145,12 +177,14 @@ int handle_message(client_t *cl, char *s)
         char *gp = strtok(NULL, " ");
         printf("user want to join to %s group", gp);
         join(cl, gp);
+        print_groups(cl);
     }
     else if (strcmp(command, "leave") == 0)
     {
         char *gp = strtok(NULL, " ");
         printf("user want to join to %s group", gp);
-
+        leave(cl, gp);
+        print_groups(cl);
     }
     else if (strcmp(command, "quit") == 0)
     {
@@ -162,6 +196,7 @@ int handle_message(client_t *cl, char *s)
         char *gp = strtok(NULL, " ");
         char *message = strtok(NULL, " ");
         printf("user want to send message {%s} to %s group ", message, gp);
+        send_message(message, gp);
     }
     else
     {
