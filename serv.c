@@ -136,7 +136,7 @@ void leave_group(char *gp_name, int uid)
                         if (groups[i]->users[u].uid == uid)
                         {
                             // *(groups[i]->users[u]) = NULL;
-                            printf("removed the %s from the %s",groups[i]->users[u].name, groups[i]->name);
+                            printf("removed the %s from the %s", groups[i]->users[u].name, groups[i]->name);
                         }
                 }
                 break;
@@ -176,35 +176,45 @@ void send_message(char *s, char *gp_name)
 
 int StartsWith(const char *a, const char *b)
 {
-   if(strncmp(a, b, strlen(b)) == 0) return 1;
-   return 0;
+    if (strncmp(a, b, strlen(b)) == 0)
+        return 1;
+    return 0;
 }
 
-int handle_message(char* str, int uid){
-	if(StartsWith(str, "join")){
-		// join 
-		return 0;
-	} else if (StartsWith(str, "leave")){
-		char * token = strtok(str, " ");
-      		token = strtok(NULL, " ");
-		leave_group(token, uid);
-return 0;	
-} else if (StartsWith(str, "send")){
-	char * token = strtok(str, " ");
-      	token = strtok(NULL, " ");
-	char * message = strtok(str, " ");
-	send_message(message, token); 	
-	return 0;
-} else if (StartsWith(str, "quit")){
-	printf("%d has left\n",uid);
-            	return 1;
-		// quit
-	} else {
-		printf("invalid message");		
-}	
-return 0;
+int handle_message(char *str, int uid)
+{
+    if (StartsWith(str, "join"))
+    {
+        // join
+        return 0;
+    }
+    else if (StartsWith(str, "leave"))
+    {
+        char *token = strtok(str, " ");
+        token = strtok(NULL, " ");
+        leave_group(token, uid);
+        return 0;
+    }
+    else if (StartsWith(str, "send"))
+    {
+        char *token = strtok(str, " ");
+        token = strtok(NULL, " ");
+        char *message = strtok(str, " ");
+        send_message(message, token);
+        return 0;
+    }
+    else if (StartsWith(str, "quit"))
+    {
+        printf("%d has left\n", uid);
+        return 1;
+        // quit
+    }
+    else
+    {
+        printf("invalid message");
+    }
+    return 0;
 }
-
 
 void *handle_client(void *arg)
 {
@@ -212,11 +222,10 @@ void *handle_client(void *arg)
     char name[USERNAME_LIMIT];
     int leave_flag = 0;
 
-
     struct client_t *cli = (struct client_t *)arg;
 
     // Name
-    if (recv(cli->sockfd, name, 32, 0) <= 0 || strlen(name) < 2 || strlen(name) >= 32 - 1)
+    if (recv(cli->sockfd, name, USERNAME_LIMIT, 0) <= 0 || strlen(name) < 2 || strlen(name) >= USERNAME_LIMIT - 1)
     {
         printf("Didn't enter the name.\n");
         leave_flag = 1;
@@ -239,15 +248,14 @@ void *handle_client(void *arg)
         }
 
         int receive = recv(cli->sockfd, buff_out, BUFFER_SZ, 0);
-      
+
         if (receive > 0)
         {
             if (strlen(buff_out) > 0)
             {
-                // send_message(buff_out, cli->uid);
-		leave_flag = handle_message(buff_out, cli->uid);
+                leave_flag = handle_message(buff_out, cli->uid);
                 str_trim_lf(buff_out, strlen(buff_out));
-		printf("%s\n", buff_out);
+                printf("%s\n", buff_out);
                 printf("%s -> %s\n", buff_out, cli->name);
             }
         }
@@ -324,13 +332,13 @@ int main(int argc, char **argv)
 
         /* Check if max clients is reached */
         //if ((cli_count + 1) == MAX_CLIENTS)
-       // {
-         //   printf("Max clients reached. Rejected: ");
-           // print_client_addr(cli_addr);
-//            printf(":%d\n", cli_addr.sin_port);
-  //          close(connfd);
-    //        continue;
-      //  }
+        // {
+        //   printf("Max clients reached. Rejected: ");
+        // print_client_addr(cli_addr);
+        //            printf(":%d\n", cli_addr.sin_port);
+        //          close(connfd);
+        //        continue;
+        //  }
 
         /* Client settings */
         struct client_t *cli = (struct client_t *)malloc(sizeof(struct client_t));
