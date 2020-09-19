@@ -7,6 +7,8 @@
 #include <errno.h>
 #include <string.h>
 #include <pthread.h>
+#include <signal.h>
+#include <string.h>
 
 #define GROUP_NAME_LIMIT 32
 #define GROUP_MEMBER_LIMIT 32
@@ -15,23 +17,25 @@
 #define MAX_CLIENTS 100
 #define BUFFER_SZ 2048
 
+static int uid = 10;
+
 /* Client structure */
-typedef struct
+struct client_t
 {
     struct sockaddr_in address;
     int sockfd;
     int uid;
     char name[USERNAME_LIMIT];
-} client_t;
+};
 
-typedef struct
+struct group_t
 {
-    char name[GROUP_LIMIT];
-    client_t users[GROUP_MEMBER_LIMIT];
-} group_t;
+    char name[GROUP_NAME_LIMIT];
+    struct client_t users[GROUP_MEMBER_LIMIT];
+};
 
-group_t *groups[GROUP_SIZE_LIMIT];
-client_t *clients[MAX_CLIENTS];
+struct group_t *groups[GROUP_SIZE_LIMIT];
+struct client_t *clients[MAX_CLIENTS];
 
 pthread_mutex_t groups_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -65,7 +69,7 @@ void print_client_addr(struct sockaddr_in addr)
 }
 
 /* Add clients to queue */
-void user_queue_add(client_t *cl)
+void user_queue_add(struct client_t *cl)
 {
     pthread_mutex_lock(&clients_mutex);
 
@@ -81,7 +85,7 @@ void user_queue_add(client_t *cl)
     pthread_mutex_unlock(&clients_mutex);
 }
 
-void group_queue_add(group_t *gp)
+void group_queue_add(struct group_t *gp)
 {
     pthread_mutex_lock(&groups_mutex);
 
@@ -128,10 +132,11 @@ void leave_group(char *gp_name, int uid)
             {
                 for (int u = 0; u < GROUP_MEMBER_LIMIT; u++)
                 {
-                    if (groups[i]->users[u])
+                    if (&groups[i]->users[u])
                         if (groups[i]->users[u].uid == uid)
                         {
-                            groups[i]->users[u].uid = NULL;
+                            // *(groups[i]->users[u]) = NULL;
+                            printf("removed the %s from the %s",groups[i]->users[u].name, groups[i]->name);
                         }
                 }
                 break;
@@ -139,12 +144,12 @@ void leave_group(char *gp_name, int uid)
         }
     }
 
-    pthread_mutex_unlock(&group_mutex);
+    pthread_mutex_unlock(&groups_mutex);
 }
 
 void send_message(char *s, char *gp_name)
 {
-    pthread_mutex_lock(&group_mutex);
+    pthread_mutex_lock(&groups_mutex);
 
     for (int i = 0; i < GROUP_SIZE_LIMIT; ++i)
     {
@@ -154,8 +159,8 @@ void send_message(char *s, char *gp_name)
             {
                 for (int u = 0; u < GROUP_MEMBER_LIMIT; u++)
                 {
-                    if (groups[i]->users[u])
-                        if (write(groups[i]->users[u]->sockfd, s, strlen(s)) < 0)
+                    if (&groups[i]->users[u])
+                        if (write(groups[i]->users[u].sockfd, s, strlen(s)) < 0)
                         {
                             perror("ERROR: write to descriptor failed");
                             break;
@@ -166,15 +171,49 @@ void send_message(char *s, char *gp_name)
         }
     }
 
-    pthread_mutex_unlock(&group_mutex);
+    pthread_mutex_unlock(&groups_mutex);
 }
+
+int StartsWith(const char *a, const char *b)
+{
+   if(strncmp(a, b, strlen(b)) == 0) return 1;
+   return 0;
+}
+
+int handle_message(char* str, int uid){
+	if(StartsWith(str, "join")){
+		// join 
+		return 0;
+	} else if (StartsWith(str, "leave")){
+		char * token = strtok(str, " ");
+      		token = strtok(NULL, " ");
+		leave_group(token, uid);
+return 0;	
+} else if (StartsWith(str, "send")){
+	char * token = strtok(str, " ");
+      	token = strtok(NULL, " ");
+	char * message = strtok(str, " ");
+	send_message(message, token); 	
+	return 0;
+} else if (StartsWith(str, "quit")){
+	printf("%d has left\n",uid);
+            	return 1;
+		// quit
+	} else {
+		printf("invalid message");		
+}	
+return 0;
+}
+
 
 void *handle_client(void *arg)
 {
     char buff_out[BUFFER_SZ];
     char name[USERNAME_LIMIT];
+    int leave_flag = 0;
 
-    client_t *cli = (client_t *)arg;
+
+    struct client_t *cli = (struct client_t *)arg;
 
     // Name
     if (recv(cli->sockfd, name, 32, 0) <= 0 || strlen(name) < 2 || strlen(name) >= 32 - 1)
@@ -200,23 +239,19 @@ void *handle_client(void *arg)
         }
 
         int receive = recv(cli->sockfd, buff_out, BUFFER_SZ, 0);
+      
         if (receive > 0)
         {
             if (strlen(buff_out) > 0)
             {
                 // send_message(buff_out, cli->uid);
-
+		leave_flag = handle_message(buff_out, cli->uid);
                 str_trim_lf(buff_out, strlen(buff_out));
+		printf("%s\n", buff_out);
                 printf("%s -> %s\n", buff_out, cli->name);
             }
         }
-        else if (receive == 0 || strcmp(buff_out, "exit") == 0)
-        {
-            sprintf(buff_out, "%s has left\n", cli->name);
-            printf("%s", buff_out);
-            // send_message(buff_out, cli->uid);
-            leave_flag = 1;
-        }
+
         else
         {
             printf("ERROR: -1\n");
@@ -228,7 +263,7 @@ void *handle_client(void *arg)
 
     /* Delete client from queue and yield thread */
     close(cli->sockfd);
-    queue_remove(cli->uid);
+    client_queue_remove(cli->uid);
     free(cli);
     pthread_detach(pthread_self());
 
@@ -288,23 +323,23 @@ int main(int argc, char **argv)
         connfd = accept(listenfd, (struct sockaddr *)&cli_addr, &clilen);
 
         /* Check if max clients is reached */
-        if ((cli_count + 1) == MAX_CLIENTS)
-        {
-            printf("Max clients reached. Rejected: ");
-            print_client_addr(cli_addr);
-            printf(":%d\n", cli_addr.sin_port);
-            close(connfd);
-            continue;
-        }
+        //if ((cli_count + 1) == MAX_CLIENTS)
+       // {
+         //   printf("Max clients reached. Rejected: ");
+           // print_client_addr(cli_addr);
+//            printf(":%d\n", cli_addr.sin_port);
+  //          close(connfd);
+    //        continue;
+      //  }
 
         /* Client settings */
-        client_t *cli = (client_t *)malloc(sizeof(client_t));
+        struct client_t *cli = (struct client_t *)malloc(sizeof(struct client_t));
         cli->address = cli_addr;
         cli->sockfd = connfd;
         cli->uid = uid++;
 
         /* Add client to the queue and fork thread */
-        queue_add(cli);
+        user_queue_add(cli);
         pthread_create(&tid, NULL, &handle_client, (void *)cli);
 
         /* Reduce CPU usage */
