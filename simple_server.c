@@ -121,6 +121,11 @@ void send_message(char *s, int uid)
 
 int handle_message(client_t *cl, char *s)
 {
+    // str_trim_lf(s, strlen(s));      
+    // s = s[strlen(s) - 1];
+    // s/trtok(s, "\n");
+    s[strcspn(s, "\n")] = 0;
+    // client_t *cl = (client_t *)client;
     char *command = strtok(s, " ");
     printf("command is: %s", command);
     if (strcmp(command, "join") == 0)
@@ -135,9 +140,9 @@ int handle_message(client_t *cl, char *s)
         printf("user want to join to %s group", gp);
 
     }
-    else if (strcmp(command, "quit") == 0)
+    else if (strcmp(command, "quit\r\n") == 0)
     {
-        printf("user %s quit", user->name);
+        printf("user %s quit", cl->name);
         return 1;
     }
     else if (strcmp(command, "send") == 0)
